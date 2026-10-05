@@ -22,11 +22,14 @@ class Model:
         )
         # Some older tokenizers (e.g., InCoder) only specify these tokens in
         # the model config.
-        config = self.model.config
-        if self.tokenizer.eos_token is None and config.eos_token_id is not None:
-            self.tokenizer.eos_token = self.tokenizer.convert_ids_to_tokens(config.eos_token_id)
-        if self.tokenizer.pad_token is None and config.pad_token_id is not None:
-            self.tokenizer.pad_token = self.tokenizer.convert_ids_to_tokens(config.pad_token_id)
+        # Not every config defines these attributes (e.g., CodeGen has no
+        # pad_token_id).
+        eos_token_id = getattr(self.model.config, "eos_token_id", None)
+        pad_token_id = getattr(self.model.config, "pad_token_id", None)
+        if self.tokenizer.eos_token is None and eos_token_id is not None:
+            self.tokenizer.eos_token = self.tokenizer.convert_ids_to_tokens(eos_token_id)
+        if self.tokenizer.pad_token is None and pad_token_id is not None:
+            self.tokenizer.pad_token = self.tokenizer.convert_ids_to_tokens(pad_token_id)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         assert (
