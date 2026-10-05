@@ -89,13 +89,15 @@ async def do_single(
     lang: str,
     max_tokens: int,
     temperature: float,
+    no_temperature: bool,
     top_p: Optional[float],
     prefix: str,
 ) -> None:
     lm_kwargs = {
         "model": name,
         "model_type": "chat",
-        "temperature": temperature,
+        # LiteLLM drops None-valued parameters, so the request has no temperature.
+        "temperature": None if no_temperature else temperature,
         "max_tokens": max_tokens,
         "cache": False,
     }
@@ -247,17 +249,23 @@ async def do_bench(
     lang: str,
     name_override: Optional[str],
     root_dataset: str,
-    temperature: float,
+    temperature: Optional[float],
+    no_temperature: bool,
     num_concurrent: int,
     max_tokens: int,
     max_completions: int,
     top_p: Optional[float],
     dataset: Optional[str],
 ) -> None:
+    if no_temperature:
+        # Some models (e.g., Claude Opus 5.5) reject the temperature parameter.
+        # We omit it from requests and record the provider default of 1.0.
+        temperature = 1.0
     lm_kwargs = {
         "model": name,
         "model_type": "chat",
-        "temperature": temperature,
+        # LiteLLM drops None-valued parameters, so the request has no temperature.
+        "temperature": None if no_temperature else temperature,
         "max_tokens": max_tokens,
         "cache": False,
     }
@@ -347,8 +355,14 @@ async def main() -> None:
         default="humaneval",
         help="Root dataset to use for completions",
     )
-    bench.add_argument(
-        "--temperature", type=float, required=True, help="Temperature for completions"
+    bench_temperature = bench.add_mutually_exclusive_group(required=True)
+    bench_temperature.add_argument(
+        "--temperature", type=float, help="Temperature for completions"
+    )
+    bench_temperature.add_argument(
+        "--no-temperature",
+        action="store_true",
+        help="Do not send a temperature (for models that reject it). Recorded as 1.0.",
     )
     bench.add_argument(
         "--num-concurrent",
@@ -396,6 +410,11 @@ async def main() -> None:
     )
     single.add_argument(
         "--temperature", type=float, default=0.2, help="Temperature for completions"
+    )
+    single.add_argument(
+        "--no-temperature",
+        action="store_true",
+        help="Do not send a temperature (for models that reject it)",
     )
     single.add_argument(
         "--top-p",
