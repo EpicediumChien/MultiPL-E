@@ -13,7 +13,11 @@ class Model:
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
         self.model = AutoModelForCausalLM.from_pretrained(
             name, revision=revision, torch_dtype=dtype, trust_remote_code=True, **model_kwargs
-        ).cuda()
+        )
+        # Quantized models are placed on the GPU by device_map and cannot be
+        # moved with .cuda().
+        if "quantization_config" not in model_kwargs:
+            self.model = self.model.cuda()
         self.tokenizer = AutoTokenizer.from_pretrained(
             tokenizer_name or name,
             revision=tokenizer_revision or revision,
@@ -153,6 +157,11 @@ def automodel_partial_arg_parser():
     args.add_argument("--tokenizer_revision", type=str)
     args.add_argument("--name-override", type=str)
     args.add_argument("--flash-attention2", action="store_true")
+    args.add_argument(
+        "--load-in-4bit",
+        action="store_true",
+        help="Quantize weights to 4 bits with bitsandbytes (for large models on small GPUs)",
+    )
     return args
 
 
@@ -174,6 +183,16 @@ def main():
     model_kwargs = { }
     if args.flash_attention2:
         model_kwargs["attn_implementation"] = "flash_attention_2"
+    if args.load_in_4bit:
+        from transformers import BitsAndBytesConfig
+
+        compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        model_kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=compute_dtype,
+        )
+        model_kwargs["device_map"] = "cuda"
 
     model = Model(
         args.name, args.revision,
