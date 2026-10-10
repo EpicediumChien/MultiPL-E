@@ -2,6 +2,7 @@ import datasets
 import argparse
 import gzip
 import json
+import os
 from pathlib import Path
 from tqdm import tqdm
 import sys
@@ -188,8 +189,13 @@ def make_main(args, model_name, gen_completions):
             modified_problems.add(item["name"])
 
         for name in modified_problems:
-            with gzip.open(exp_dir / f"{name}.json.gz", "wt") as f:
+            # Write to a temporary file and then rename it, so that an
+            # interruption mid-write cannot leave a corrupt file behind.
+            path = exp_dir / f"{name}.json.gz"
+            tmp_path = exp_dir / f"{name}.json.gz.tmp"
+            with gzip.open(tmp_path, "wt") as f:
                 f.write(json.dumps(all_completions[name]))
+            os.replace(tmp_path, path)
 
 
 def read_completions(exp_dir, temperature, top_p, max_tokens, problem):
